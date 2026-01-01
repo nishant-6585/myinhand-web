@@ -2,265 +2,223 @@ import { useEffect, useRef, useState } from "react";
 import { calculateSalary } from "./salaryCalculator";
 import type { PfBase, PfType } from "./salaryCalculator";
 
-function App() {
+export default function App() {
   const [ctc, setCtc] = useState("");
   const [basicPercent, setBasicPercent] = useState("40");
-
   const [pfBase, setPfBase] = useState<PfBase>("STATUTORY");
-  const [pfType, setPfType] = useState<PfType>("PERCENTAGE");
-  const [pfValue, setPfValue] = useState("");
+  const [pfType, setPfType] = useState<PfType>("FIXED");
+  const [pfValue, setPfValue] = useState("1800");
 
-  const [comment, setComment] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-
-  // Refs
   const ctcRef = useRef<HTMLInputElement>(null);
-  const basicRef = useRef<HTMLSelectElement>(null);
-  const pfBaseRef = useRef<HTMLSelectElement>(null);
-  const pfTypeRef = useRef<HTMLSelectElement>(null);
-  const pfValueRef = useRef<HTMLInputElement>(null);
-  const feedbackRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-focus Annual CTC
   useEffect(() => {
     ctcRef.current?.focus();
     ctcRef.current?.select();
   }, []);
 
-  const result = calculateSalary({
+  useEffect(() => {
+    if (pfBase === "STATUTORY") {
+      setPfType("FIXED");
+      setPfValue("1800");
+    } else {
+      setPfType("PERCENTAGE");
+      setPfValue("12");
+    }
+  }, [pfBase]);
+
+  const hasCtc = Number(ctc) > 0;
+
+  const commonInput = {
     annualCtc: Number(ctc),
     basicPercent: Number(basicPercent),
     pfBase,
     pfType,
     pfValue: Number(pfValue),
-  });
-
-  const handleSubmitFeedback = () => {
-    if (!comment.trim()) return;
-    setSubmitted(true);
-    setComment("");
   };
 
+  const oldResult = hasCtc
+    ? calculateSalary({ ...commonInput, taxRegime: "OLD" })
+    : null;
+
+  const newResult = hasCtc
+    ? calculateSalary({ ...commonInput, taxRegime: "NEW" })
+    : null;
+
+  const better =
+    oldResult && newResult
+      ? oldResult.monthlyInHand > newResult.monthlyInHand
+        ? "OLD"
+        : "NEW"
+      : null;
+
   return (
-    <div style={pageStyle}>
-      <div style={cardStyle}>
-        <h1 style={{ marginBottom: 4 }}>MyInHand</h1>
-        <p style={{ color: "#666", marginTop: 0 }}>
-          Understand your real take-home salary
-        </p>
+    <div style={page}>
+      <div style={card}>
+        <h1 style={title}>MyInHand</h1>
 
-        <hr />
+        {/* Salary */}
+        <section>
+          <h3 style={sectionTitle}>Salary Details</h3>
 
-        <h3>Salary Details</h3>
-
-        <div style={fieldStyle}>
-          <div style={labelStyle}>Annual CTC (₹)</div>
+          <div style={label}>Annual CTC</div>
           <input
             ref={ctcRef}
-            type="number"
             value={ctc}
             onChange={(e) => setCtc(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") basicRef.current?.focus();
-            }}
-            style={inputStyle}
+            style={input}
           />
-        </div>
 
-        <div style={fieldStyle}>
-          <div style={labelStyle}>Basic Salary (% of CTC)</div>
+          <div style={label}>Basic (% of CTC)</div>
           <select
-            ref={basicRef}
             value={basicPercent}
             onChange={(e) => setBasicPercent(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") pfBaseRef.current?.focus();
-            }}
-            style={selectStyle}
+            style={input}
           >
             {Array.from({ length: 21 }, (_, i) => {
-              const value = 30 + i;
+              const v = 30 + i;
               return (
-                <option key={value} value={value}>
-                  {value}%
+                <option key={v} value={v}>
+                  {v}%
                 </option>
               );
             })}
           </select>
-        </div>
+        </section>
 
-        <hr />
+        {/* PF */}
+        <section>
+          <h3 style={sectionTitle}>Provident Fund</h3>
 
-        <h3>Provident Fund</h3>
-
-        <div style={fieldStyle}>
-          <div style={labelStyle}>PF Calculation Base</div>
+          <div style={label}>PF Base</div>
           <select
-            ref={pfBaseRef}
             value={pfBase}
             onChange={(e) => setPfBase(e.target.value as PfBase)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") pfTypeRef.current?.focus();
-            }}
-            style={selectStyle}
+            style={input}
           >
-            <option value="STATUTORY">Statutory (₹15,000 cap → ₹1,800)</option>
-            <option value="FULL_BASIC">Full Basic (12% of actual Basic)</option>
+            <option value="STATUTORY">Statutory (₹1,800)</option>
+            <option value="FULL_BASIC">Full Basic (12%)</option>
           </select>
-        </div>
 
-        <div style={fieldStyle}>
-          <div style={labelStyle}>Employee PF Type</div>
-          <select
-            ref={pfTypeRef}
-            value={pfType}
-            onChange={(e) => setPfType(e.target.value as PfType)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") pfValueRef.current?.focus();
-            }}
-            style={selectStyle}
-          >
-            <option value="PERCENTAGE">% of PF Wage</option>
-            <option value="FIXED">Fixed Monthly Amount</option>
-          </select>
-        </div>
-
-        <div style={fieldStyle}>
-          <div style={labelStyle}>
-            {pfType === "PERCENTAGE"
-              ? "Employee PF (%)"
-              : "Employee PF Amount (₹ / month)"}
+          <div style={label}>
+            {pfType === "FIXED" ? "Employee PF (₹)" : "Employee PF (%)"}
           </div>
           <input
-            ref={pfValueRef}
-            type="number"
             value={pfValue}
             onChange={(e) => setPfValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") feedbackRef.current?.focus();
-            }}
-            style={inputStyle}
+            style={input}
           />
-        </div>
+        </section>
 
-        <hr />
+        {/* Results */}
+        <section>
+          <h3 style={sectionTitle}>In-Hand Comparison</h3>
 
-        <h3>Results</h3>
+          {!hasCtc && <p style={mutedText}>Enter Annual CTC to see results</p>}
 
-        {result.monthlyCtc !== null && (
-          <p>
-            Monthly CTC: <strong>₹ {result.monthlyCtc.toFixed(2)}</strong>
-          </p>
-        )}
+          {hasCtc && oldResult && newResult && (
+            <div style={grid}>
+              <div
+                style={{
+                  ...box,
+                  borderColor: better === "OLD" ? "#2e7d32" : "#ccc",
+                }}
+              >
+                <h4 style={boxTitle}>Old Regime</h4>
+                <p style={text}>
+                  In-Hand: ₹{oldResult.monthlyInHand.toFixed(0)}
+                </p>
+                <p style={text}>Tax: ₹{oldResult.monthlyTax.toFixed(0)}</p>
+              </div>
 
-        {result.monthlyBasic !== null && (
-          <p>
-            Monthly Basic Salary:{" "}
-            <strong>₹ {result.monthlyBasic.toFixed(2)}</strong>
-          </p>
-        )}
-
-        {result.employeePf !== null && (
-          <p>
-            Employee PF: <strong>₹ {result.employeePf.toFixed(2)}</strong>
-          </p>
-        )}
-
-        {result.employerPf !== null && (
-          <p style={{ color: "#777" }}>
-            Employer PF (not part of in-hand):{" "}
-            <strong>₹ {result.employerPf.toFixed(2)}</strong>
-          </p>
-        )}
-
-        {pfBase === "STATUTORY" && result.employeePf !== null && (
-          <p style={{ fontSize: 12, color: "#999" }}>
-            PF calculated on statutory wage cap of ₹15,000
-          </p>
-        )}
-
-        <hr />
-
-        <h3>Feedback</h3>
-
-        <div style={fieldStyle}>
-          <div style={labelStyle}>Your Feedback</div>
-          <textarea
-            ref={feedbackRef}
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            rows={4}
-            placeholder="Tell us what can be improved…"
-            style={{ ...inputStyle, resize: "vertical" }}
-          />
-        </div>
-
-        <button style={buttonStyle} onClick={handleSubmitFeedback}>
-          Submit Feedback
-        </button>
-
-        {submitted && (
-          <p style={{ color: "green", marginTop: 8 }}>
-            Thank you for your feedback 🙏
-          </p>
-        )}
+              <div
+                style={{
+                  ...box,
+                  borderColor: better === "NEW" ? "#2e7d32" : "#ccc",
+                }}
+              >
+                <h4 style={boxTitle}>New Regime</h4>
+                <p style={text}>
+                  In-Hand: ₹{newResult.monthlyInHand.toFixed(0)}
+                </p>
+                <p style={text}>Tax: ₹{newResult.monthlyTax.toFixed(0)}</p>
+              </div>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );
 }
 
-/* ---------- Styles ---------- */
+/* ---------- styles ---------- */
 
-const pageStyle: React.CSSProperties = {
+const page: React.CSSProperties = {
   minHeight: "100vh",
-  backgroundColor: "#f4f6f8",
-  padding: "20px",
+  background: "#f4f6f8",
+  padding: 20,
   display: "flex",
   justifyContent: "center",
 };
 
-const cardStyle: React.CSSProperties = {
+const card: React.CSSProperties = {
   width: "100%",
-  maxWidth: "720px",
-  backgroundColor: "#fff",
-  borderRadius: "12px",
-  padding: "24px",
+  maxWidth: 760,
+  background: "#ffffff",
+  padding: 24,
+  borderRadius: 12,
   boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+  color: "#111", // 🔑 FIX: force dark text for ALL children
 };
 
-const fieldStyle: React.CSSProperties = {
-  marginTop: "14px",
+const title: React.CSSProperties = {
+  color: "#111",
 };
 
-const labelStyle: React.CSSProperties = {
-  fontSize: "14px",
+const sectionTitle: React.CSSProperties = {
+  marginTop: 24,
+  marginBottom: 12,
+  color: "#111",
+};
+
+const label: React.CSSProperties = {
+  marginTop: 12,
+  marginBottom: 4,
+  fontSize: 14,
   fontWeight: 600,
-  color: "#333",
-  marginBottom: "4px",
+  color: "#222",
 };
 
-const inputStyle: React.CSSProperties = {
+const text: React.CSSProperties = {
+  color: "#111",
+};
+
+const mutedText: React.CSSProperties = {
+  color: "#555",
+};
+
+const input: React.CSSProperties = {
   width: "100%",
   padding: "10px",
-  borderRadius: "6px",
+  borderRadius: 6,
   border: "1px solid #ccc",
-  fontSize: "14px",
+  fontSize: 14,
+  color: "#111",
+  background: "#fff",
 };
 
-const selectStyle: React.CSSProperties = {
-  ...inputStyle,
+const grid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 16,
 };
 
-const buttonStyle: React.CSSProperties = {
-  marginTop: "12px",
-  padding: "12px 16px",
-  backgroundColor: "#1976d2",
-  color: "#fff",
-  border: "none",
-  borderRadius: "6px",
-  cursor: "pointer",
-  width: "100%",
-  fontSize: "15px",
+const box: React.CSSProperties = {
+  padding: 16,
+  border: "2px solid #ccc",
+  borderRadius: 10,
 };
 
-export default App;
+const boxTitle: React.CSSProperties = {
+  marginBottom: 8,
+  color: "#111",
+};
