@@ -1,10 +1,12 @@
+export type PfBase = "STATUTORY" | "FULL_BASIC";
 export type PfType = "PERCENTAGE" | "FIXED";
 
 export interface SalaryInput {
   annualCtc: number;
-  basicPercent: number; // 0–40
+  basicPercent: number; // 30–50
   pfType: PfType;
-  pfValue: number; // % or fixed amount
+  pfValue: number;
+  pfBase: PfBase;
 }
 
 export interface SalaryOutput {
@@ -15,9 +17,9 @@ export interface SalaryOutput {
 }
 
 export function calculateSalary(input: SalaryInput): SalaryOutput {
-  const { annualCtc, basicPercent, pfType, pfValue } = input;
+  const { annualCtc, basicPercent, pfType, pfValue, pfBase } = input;
 
-  if (annualCtc <= 0 || basicPercent < 0 || basicPercent > 50) {
+  if (annualCtc <= 0 || basicPercent < 30 || basicPercent > 50) {
     return {
       monthlyCtc: null,
       monthlyBasic: null,
@@ -29,13 +31,16 @@ export function calculateSalary(input: SalaryInput): SalaryOutput {
   const monthlyCtc = annualCtc / 12;
   const monthlyBasic = (annualCtc * (basicPercent / 100)) / 12;
 
-  // Employee PF calculation (capped at 12% of Basic)
   let employeePf: number | null = null;
-  const maxPf = monthlyBasic * 0.12;
+
+  const pfWage =
+    pfBase === "STATUTORY" ? Math.min(monthlyBasic, 15000) : monthlyBasic;
+
+  const maxPf = pfWage * 0.12;
 
   if (pfValue >= 0) {
     if (pfType === "PERCENTAGE") {
-      const calculated = monthlyBasic * (pfValue / 100);
+      const calculated = pfWage * (pfValue / 100);
       employeePf = Math.min(calculated, maxPf);
     }
 
@@ -44,7 +49,6 @@ export function calculateSalary(input: SalaryInput): SalaryOutput {
     }
   }
 
-  // Employer PF mirrors Employee PF
   const employerPf = employeePf;
 
   return {
