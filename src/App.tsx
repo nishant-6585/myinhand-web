@@ -1,13 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { calculateSalary } from "./salaryCalculator";
-import type { PfBase, PfType } from "./salaryCalculator";
+import { calculatePayroll } from "./salaryCalculator";
+import type { Earning, Deduction } from "./salaryCalculator";
 
 export default function App() {
   const [ctc, setCtc] = useState("");
   const [basicPercent, setBasicPercent] = useState("40");
-  const [pfBase, setPfBase] = useState<PfBase>("STATUTORY");
-  const [pfType, setPfType] = useState<PfType>("FIXED");
-  const [pfValue, setPfValue] = useState("1800");
 
   const ctcRef = useRef<HTMLInputElement>(null);
 
@@ -16,39 +13,48 @@ export default function App() {
     ctcRef.current?.select();
   }, []);
 
-  useEffect(() => {
-    if (pfBase === "STATUTORY") {
-      setPfType("FIXED");
-      setPfValue("1800");
-    } else {
-      setPfType("PERCENTAGE");
-      setPfValue("12");
-    }
-  }, [pfBase]);
+  const annualCtc = Number(ctc);
+  const monthlyCtc = annualCtc / 12;
 
-  const hasCtc = Number(ctc) > 0;
+  // ---- Auto-generated earnings ----
+  const basic = monthlyCtc * (Number(basicPercent) / 100);
 
-  const commonInput = {
-    annualCtc: Number(ctc),
-    basicPercent: Number(basicPercent),
-    pfBase,
-    pfType,
-    pfValue: Number(pfValue),
-  };
+  const earnings: Earning[] = [
+    { key: "BASIC", label: "Basic Salary", amount: basic },
+    {
+      key: "HRA",
+      label: "House Rent Allowance",
+      amount: basic * 0.4,
+    },
+    { key: "CONVEYANCE", label: "Conveyance", amount: 1600 },
+    { key: "MEAL", label: "Meal Voucher", amount: 2200 },
+    { key: "MEDICAL", label: "Medical Allowance", amount: 1250 },
+    { key: "PHONE", label: "Phone / Internet", amount: 1500 },
+  ];
 
-  const oldResult = hasCtc
-    ? calculateSalary({ ...commonInput, taxRegime: "OLD" })
-    : null;
+  // ---- Deductions (v1 fixed / placeholder) ----
+  const deductions: Deduction[] = [
+    { key: "PF", label: "Provident Fund", amount: 1800 },
+    {
+      key: "PROFESSIONAL_TAX",
+      label: "Professional Tax",
+      amount: 200,
+    },
+    {
+      key: "INCOME_TAX",
+      label: "Income Tax",
+      amount: annualCtc ? 30000 : 0,
+    },
+  ];
 
-  const newResult = hasCtc
-    ? calculateSalary({ ...commonInput, taxRegime: "NEW" })
-    : null;
-
-  const better =
-    oldResult && newResult
-      ? oldResult.monthlyInHand > newResult.monthlyInHand
-        ? "OLD"
-        : "NEW"
+  const payroll =
+    annualCtc > 0
+      ? calculatePayroll({
+          annualCtc,
+          basicPercent: Number(basicPercent),
+          earnings,
+          deductions,
+        })
       : null;
 
   return (
@@ -56,9 +62,9 @@ export default function App() {
       <div style={card}>
         <h1 style={title}>MyInHand</h1>
 
-        {/* Salary */}
+        {/* --- Inputs --- */}
         <section>
-          <h3 style={sectionTitle}>Salary Details</h3>
+          <h3 style={section}>CTC Setup</h3>
 
           <div style={label}>Annual CTC</div>
           <input
@@ -85,72 +91,56 @@ export default function App() {
           </select>
         </section>
 
-        {/* PF */}
-        <section>
-          <h3 style={sectionTitle}>Provident Fund</h3>
+        {/* --- Earnings --- */}
+        {payroll && (
+          <section>
+            <h3 style={section}>Earnings</h3>
 
-          <div style={label}>PF Base</div>
-          <select
-            value={pfBase}
-            onChange={(e) => setPfBase(e.target.value as PfBase)}
-            style={input}
-          >
-            <option value="STATUTORY">Statutory (₹1,800)</option>
-            <option value="FULL_BASIC">Full Basic (12%)</option>
-          </select>
-
-          <div style={label}>
-            {pfType === "FIXED" ? "Employee PF (₹)" : "Employee PF (%)"}
-          </div>
-          <input
-            value={pfValue}
-            onChange={(e) => setPfValue(e.target.value)}
-            style={input}
-          />
-        </section>
-
-        {/* Results */}
-        <section>
-          <h3 style={sectionTitle}>In-Hand Comparison</h3>
-
-          {!hasCtc && <p style={mutedText}>Enter Annual CTC to see results</p>}
-
-          {hasCtc && oldResult && newResult && (
-            <div style={grid}>
-              <div
-                style={{
-                  ...box,
-                  borderColor: better === "OLD" ? "#2e7d32" : "#ccc",
-                }}
-              >
-                <h4 style={boxTitle}>Old Regime</h4>
-                <p style={text}>
-                  In-Hand: ₹{oldResult.monthlyInHand.toFixed(0)}
-                </p>
-                <p style={text}>Tax: ₹{oldResult.monthlyTax.toFixed(0)}</p>
+            {payroll.earnings.map((e) => (
+              <div key={e.key} style={row}>
+                <span>{e.label}</span>
+                <span>₹ {e.amount.toFixed(0)}</span>
               </div>
+            ))}
 
-              <div
-                style={{
-                  ...box,
-                  borderColor: better === "NEW" ? "#2e7d32" : "#ccc",
-                }}
-              >
-                <h4 style={boxTitle}>New Regime</h4>
-                <p style={text}>
-                  In-Hand: ₹{newResult.monthlyInHand.toFixed(0)}
-                </p>
-                <p style={text}>Tax: ₹{newResult.monthlyTax.toFixed(0)}</p>
-              </div>
+            <div style={totalRow}>
+              <strong>Total Earnings (A)</strong>
+              <strong>₹ {payroll.totalEarnings.toFixed(0)}</strong>
             </div>
-          )}
-        </section>
+          </section>
+        )}
+
+        {/* --- Deductions --- */}
+        {payroll && (
+          <section>
+            <h3 style={section}>Deductions</h3>
+
+            {payroll.deductions.map((d) => (
+              <div key={d.key} style={row}>
+                <span>{d.label}</span>
+                <span>₹ {d.amount.toFixed(0)}</span>
+              </div>
+            ))}
+
+            <div style={totalRow}>
+              <strong>Total Deductions (B)</strong>
+              <strong>₹ {payroll.totalDeductions.toFixed(0)}</strong>
+            </div>
+          </section>
+        )}
+
+        {/* --- Net Salary --- */}
+        {payroll && (
+          <section>
+            <h2 style={net}>Net Salary: ₹ {payroll.netSalary.toFixed(0)}</h2>
+          </section>
+        )}
       </div>
     </div>
   );
 }
 
-/* ---------- styles ---------- */
+/* ---------- Styles ---------- */
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
@@ -163,62 +153,50 @@ const page: React.CSSProperties = {
 const card: React.CSSProperties = {
   width: "100%",
   maxWidth: 760,
-  background: "#ffffff",
+  background: "#fff",
   padding: 24,
   borderRadius: 12,
   boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-  color: "#111", // 🔑 FIX: force dark text for ALL children
+  color: "#111",
 };
 
 const title: React.CSSProperties = {
-  color: "#111",
+  marginBottom: 12,
 };
 
-const sectionTitle: React.CSSProperties = {
+const section: React.CSSProperties = {
   marginTop: 24,
-  marginBottom: 12,
-  color: "#111",
+  marginBottom: 8,
 };
 
 const label: React.CSSProperties = {
   marginTop: 12,
   marginBottom: 4,
-  fontSize: 14,
   fontWeight: 600,
-  color: "#222",
-};
-
-const text: React.CSSProperties = {
-  color: "#111",
-};
-
-const mutedText: React.CSSProperties = {
-  color: "#555",
 };
 
 const input: React.CSSProperties = {
   width: "100%",
-  padding: "10px",
+  padding: 10,
   borderRadius: 6,
   border: "1px solid #ccc",
-  fontSize: 14,
-  color: "#111",
-  background: "#fff",
 };
 
-const grid: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: 16,
+const row: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  padding: "6px 0",
 };
 
-const box: React.CSSProperties = {
-  padding: 16,
-  border: "2px solid #ccc",
-  borderRadius: 10,
+const totalRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  borderTop: "1px solid #ddd",
+  marginTop: 8,
+  paddingTop: 8,
 };
 
-const boxTitle: React.CSSProperties = {
-  marginBottom: 8,
-  color: "#111",
+const net: React.CSSProperties = {
+  marginTop: 24,
+  color: "#2e7d32",
 };
