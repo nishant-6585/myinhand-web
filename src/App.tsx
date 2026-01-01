@@ -13,7 +13,7 @@ function App() {
   const [comment, setComment] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
-  // 🔑 Refs for keyboard navigation
+  // Refs
   const ctcRef = useRef<HTMLInputElement>(null);
   const basicRef = useRef<HTMLSelectElement>(null);
   const pfBaseRef = useRef<HTMLSelectElement>(null);
@@ -21,7 +21,7 @@ function App() {
   const pfValueRef = useRef<HTMLInputElement>(null);
   const feedbackRef = useRef<HTMLTextAreaElement>(null);
 
-  // 🔑 Auto-focus + auto-select Annual CTC
+  // Auto-focus Annual CTC
   useEffect(() => {
     ctcRef.current?.focus();
     ctcRef.current?.select();
@@ -41,14 +41,6 @@ function App() {
     setComment("");
   };
 
-  const onEnterFocusNext =
-    (ref: React.RefObject<HTMLElement>) => (e: React.KeyboardEvent) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        ref.current?.focus();
-      }
-    };
-
   return (
     <div style={pageStyle}>
       <div style={cardStyle}>
@@ -59,7 +51,6 @@ function App() {
 
         <hr />
 
-        {/* Salary */}
         <h3>Salary Details</h3>
 
         <div style={fieldStyle}>
@@ -69,7 +60,9 @@ function App() {
             type="number"
             value={ctc}
             onChange={(e) => setCtc(e.target.value)}
-            onKeyDown={onEnterFocusNext(basicRef)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") basicRef.current?.focus();
+            }}
             style={inputStyle}
           />
         </div>
@@ -80,7 +73,9 @@ function App() {
             ref={basicRef}
             value={basicPercent}
             onChange={(e) => setBasicPercent(e.target.value)}
-            onKeyDown={onEnterFocusNext(pfBaseRef)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") pfBaseRef.current?.focus();
+            }}
             style={selectStyle}
           >
             {Array.from({ length: 21 }, (_, i) => {
@@ -96,7 +91,6 @@ function App() {
 
         <hr />
 
-        {/* PF */}
         <h3>Provident Fund</h3>
 
         <div style={fieldStyle}>
@@ -105,7 +99,9 @@ function App() {
             ref={pfBaseRef}
             value={pfBase}
             onChange={(e) => setPfBase(e.target.value as PfBase)}
-            onKeyDown={onEnterFocusNext(pfTypeRef)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") pfTypeRef.current?.focus();
+            }}
             style={selectStyle}
           >
             <option value="STATUTORY">Statutory (₹15,000 cap → ₹1,800)</option>
@@ -119,7 +115,9 @@ function App() {
             ref={pfTypeRef}
             value={pfType}
             onChange={(e) => setPfType(e.target.value as PfType)}
-            onKeyDown={onEnterFocusNext(pfValueRef)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") pfValueRef.current?.focus();
+            }}
             style={selectStyle}
           >
             <option value="PERCENTAGE">% of PF Wage</option>
@@ -138,14 +136,15 @@ function App() {
             type="number"
             value={pfValue}
             onChange={(e) => setPfValue(e.target.value)}
-            onKeyDown={onEnterFocusNext(feedbackRef)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") feedbackRef.current?.focus();
+            }}
             style={inputStyle}
           />
         </div>
 
         <hr />
 
-        {/* Results */}
         <h3>Results</h3>
 
         {result.monthlyCtc !== null && (
@@ -182,7 +181,6 @@ function App() {
 
         <hr />
 
-        {/* Feedback */}
         <h3>Feedback</h3>
 
         <div style={fieldStyle}>
@@ -211,7 +209,7 @@ function App() {
   );
 }
 
-/* ---------- Styles (Mobile-friendly) ---------- */
+/* ---------- Styles ---------- */
 
 const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
