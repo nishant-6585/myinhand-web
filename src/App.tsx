@@ -202,7 +202,7 @@ export default function App() {
           <EditableRow
             label="Special Allowance"
             value={special}
-            onChange={(v) => {
+            onChange={(v: number) => {
               setSpecial(v);
               setIsSpecialManual(true);
             }}
@@ -305,7 +305,15 @@ const Input = React.forwardRef<HTMLInputElement, any>(
   )
 );
 
-const EditableRow = ({ label, value, onChange }: any) => (
+const EditableRow = ({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) => (
   <div style={row}>
     <span>{label}</span>
     <input
