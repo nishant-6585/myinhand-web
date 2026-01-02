@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
+const FEEDBACK_API =
+  "https://script.google.com/macros/s/AKfycbzqbgAHVUz2D51D0gOmPHhEHes4Xe7vb_sR1D4RPEci5LKY6P2Kg37BM_6Rcnmt/exec";
+
 export default function App() {
   /* =========================
      Core Inputs
@@ -13,8 +16,6 @@ export default function App() {
     ctcRef.current?.focus();
     ctcRef.current?.select();
   }, []);
-
-  console.log("APP TSX LOADED");
 
   const monthlyCtc = Number(annualCtc) / 12 || 0;
 
@@ -34,7 +35,6 @@ export default function App() {
 
   const [isSpecialManual, setIsSpecialManual] = useState(false);
 
-  // Auto-derive HRA (40% of Basic) initially
   useEffect(() => {
     setHra(Math.round(basic * 0.4));
   }, [basic]);
@@ -42,7 +42,6 @@ export default function App() {
   const earningsWithoutSpecial =
     basic + hra + conveyance + meal + medical + phone;
 
-  // Auto-balance Special Allowance until user edits it
   useEffect(() => {
     if (!isSpecialManual) {
       const autoSpecial = Math.max(monthlyCtc - earningsWithoutSpecial, 0);
@@ -53,21 +52,49 @@ export default function App() {
   const grossSalary = earningsWithoutSpecial + special;
 
   /* =========================
-     Provident Fund (Derived)
+     Provident Fund
   ========================= */
   const [pfType, setPfType] = useState<"STATUTORY" | "FULL_BASIC">("STATUTORY");
-
   const employeePf = pfType === "STATUTORY" ? 1800 : Math.round(basic * 0.12);
 
   /* =========================
      Other Deductions
   ========================= */
   const professionalTax = 200;
-  const incomeTax = 30000; // placeholder (monthly)
-
+  const incomeTax = 30000;
   const totalDeductions = employeePf + professionalTax + incomeTax;
-
   const inHand = grossSalary - totalDeductions;
+
+  /* =========================
+     Feedback (Google Sheets)
+  ========================= */
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackList, setFeedbackList] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch(FEEDBACK_API)
+      .then((res) => res.json())
+      .then((data) => {
+        const texts = data.map((item: any) => item.feedback);
+        setFeedbackList(texts.reverse());
+      })
+      .catch(console.error);
+  }, []);
+
+  const submitFeedback = async () => {
+    if (!feedbackText.trim()) return;
+
+    await fetch(FEEDBACK_API, {
+      method: "POST",
+      body: JSON.stringify({
+        feedback: feedbackText,
+        userAgent: navigator.userAgent,
+      }),
+    });
+
+    setFeedbackList((prev) => [feedbackText, ...prev]);
+    setFeedbackText("");
+  };
 
   /* =========================
      UI
@@ -77,7 +104,6 @@ export default function App() {
       <div style={card}>
         <h1 style={title}>MyInHand</h1>
 
-        {/* -------- Salary Setup -------- */}
         <Section title="CTC Setup">
           <Label text="Annual CTC" />
           <Input ref={ctcRef} value={annualCtc} onChange={setAnnualCtc} />
@@ -101,36 +127,29 @@ export default function App() {
           <Muted>Monthly Basic: ₹ {basic.toFixed(0)}</Muted>
         </Section>
 
-        {/* -------- Earnings -------- */}
         <Section title="Earnings">
           <Row label="Basic Salary" value={basic} />
-
           <EditableRow
             label="House Rent Allowance"
             value={hra}
             onChange={setHra}
           />
-
           <EditableRow
             label="Conveyance"
             value={conveyance}
             onChange={setConveyance}
           />
-
           <EditableRow label="Meal Voucher" value={meal} onChange={setMeal} />
-
           <EditableRow
             label="Medical Allowance"
             value={medical}
             onChange={setMedical}
           />
-
           <EditableRow
             label="Phone / Internet"
             value={phone}
             onChange={setPhone}
           />
-
           <EditableRow
             label="Special / Consolidated Allowance"
             value={special}
@@ -139,19 +158,14 @@ export default function App() {
               setIsSpecialManual(true);
             }}
           />
-
           <TotalRow label="Total Earnings (A)" value={grossSalary} />
         </Section>
 
-        {/* -------- Deductions -------- */}
         <Section title="Deductions">
           <Label text="Provident Fund (Employee)" />
-
           <select
             value={pfType}
-            onChange={(e) =>
-              setPfType(e.target.value as "STATUTORY" | "FULL_BASIC")
-            }
+            onChange={(e) => setPfType(e.target.value as any)}
             style={input}
           >
             <option value="STATUTORY">Statutory (₹1,800)</option>
@@ -161,13 +175,54 @@ export default function App() {
           <Row label="Employee PF" value={employeePf} />
           <Row label="Professional Tax" value={professionalTax} />
           <Row label="Income Tax (monthly)" value={incomeTax} />
-
           <TotalRow label="Total Deductions (B)" value={totalDeductions} />
         </Section>
 
-        {/* -------- Summary -------- */}
         <Section title="Summary">
           <h2 style={net}>In-Hand Salary: ₹ {inHand.toFixed(0)}</h2>
+        </Section>
+
+        {/* -------- Feedback -------- */}
+        <Section title="Feedback">
+          <textarea
+            value={feedbackText}
+            onChange={(e) => setFeedbackText(e.target.value)}
+            placeholder="Share your feedback..."
+            style={{
+              width: "100%",
+              minHeight: 80,
+              padding: 10,
+              borderRadius: 6,
+              border: "1px solid #ccc",
+            }}
+          />
+
+          <button
+            onClick={submitFeedback}
+            style={{
+              marginTop: 10,
+              padding: "8px 16px",
+              borderRadius: 6,
+              border: "none",
+              background: "#1976d2",
+              color: "#fff",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Submit Feedback
+          </button>
+
+          <div style={{ marginTop: 20 }}>
+            {feedbackList.map((fb, i) => (
+              <div
+                key={i}
+                style={{ padding: "6px 0", borderBottom: "1px solid #eee" }}
+              >
+                {fb}
+              </div>
+            ))}
+          </div>
         </Section>
       </div>
     </div>
@@ -195,10 +250,7 @@ const Label = ({ text }: { text: string }) => <div style={label}>{text}</div>;
 
 const Input = React.forwardRef<
   HTMLInputElement,
-  {
-    value: string;
-    onChange: (v: string) => void;
-  }
+  { value: string; onChange: (v: string) => void }
 >(({ value, onChange }, ref) => (
   <input
     ref={ref}
@@ -208,17 +260,9 @@ const Input = React.forwardRef<
   />
 ));
 
-const EditableRow = ({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-}) => (
+const EditableRow = ({ label, value, onChange }: any) => (
   <div style={row}>
-    <span style={{ color: "red" }}>EDITABLE → {label}</span>
+    <span>{label}</span>
     <input
       type="number"
       value={value}
@@ -228,23 +272,21 @@ const EditableRow = ({
   </div>
 );
 
-const Row = ({ label, value }: { label: string; value: number }) => (
+const Row = ({ label, value }: any) => (
   <div style={row}>
     <span>{label}</span>
     <strong>₹ {value.toFixed(0)}</strong>
   </div>
 );
 
-const TotalRow = ({ label, value }: { label: string; value: number }) => (
+const TotalRow = ({ label, value }: any) => (
   <div style={totalRow}>
     <strong>{label}</strong>
     <strong>₹ {value.toFixed(0)}</strong>
   </div>
 );
 
-const Muted = ({ children }: { children: React.ReactNode }) => (
-  <div style={muted}>{children}</div>
-);
+const Muted = ({ children }: any) => <div style={muted}>{children}</div>;
 
 /* =========================
    Styles
@@ -268,51 +310,36 @@ const card: React.CSSProperties = {
   color: "#111",
 };
 
-const title: React.CSSProperties = {
-  marginBottom: 12,
-};
-
-const section: React.CSSProperties = {
-  marginTop: 28,
-  marginBottom: 12,
-};
-
-const label: React.CSSProperties = {
-  fontWeight: 600,
-  marginBottom: 4,
-};
-
+const title: React.CSSProperties = { marginBottom: 12 };
+const section: React.CSSProperties = { marginTop: 28, marginBottom: 12 };
+const label: React.CSSProperties = { fontWeight: 600, marginBottom: 4 };
 const muted: React.CSSProperties = {
   fontSize: 13,
   color: "#555",
   marginTop: 6,
 };
-
 const input: React.CSSProperties = {
   width: "100%",
   padding: 10,
   borderRadius: 6,
   border: "1px solid #ccc",
 };
-
 const smallInput: React.CSSProperties = {
   width: 160,
   padding: "6px 8px",
   borderRadius: 6,
   border: "2px solid #1976d2",
   background: "#e3f2fd",
-  color: "#0d47a1", // 🔑 text color (dark blue)
+  color: "#0d47a1",
   fontWeight: 600,
   textAlign: "right",
 };
-
 const row: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
   marginBottom: 10,
 };
-
 const totalRow: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
@@ -320,7 +347,4 @@ const totalRow: React.CSSProperties = {
   paddingTop: 8,
   marginTop: 8,
 };
-
-const net: React.CSSProperties = {
-  color: "#2e7d32",
-};
+const net: React.CSSProperties = { color: "#2e7d32" };
