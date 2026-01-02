@@ -1,30 +1,35 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 const FEEDBACK_API =
-  "https://script.google.com/macros/s/AKfycbzqbgAHVUz2D51D0gOmPHhEHes4Xe7vb_sR1D4RPEci5LKY6P2Kg37BM_6Rcnmt/exec";
+  "https://script.google.com/macros/s/AKfycbx95gZM-aF_vZ2xiaIWPjuUZu7DMNpsjHoRI5WhveS_Gvw7UVWqJs9wUX3vpQmpf64/exec";
+
+const LIKE_STORAGE_KEY = "myinhand_has_liked";
 
 export default function App() {
   /* =========================
      Core Inputs
   ========================= */
-  const [annualCtc, setAnnualCtc] = useState("3600000");
-  const [basicPercent, setBasicPercent] = useState("48");
+  const [annualCtc, setAnnualCtc] = useState("");
+  const [basicPercent, setBasicPercent] = useState("");
 
   const ctcRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     ctcRef.current?.focus();
-    ctcRef.current?.select();
   }, []);
 
-  const monthlyCtc = Number(annualCtc) / 12 || 0;
+  const isCtcValid = Number(annualCtc) > 0;
+  const isBasicValid = Number(basicPercent) > 0;
+
+  const monthlyCtc = isCtcValid ? Number(annualCtc) / 12 : 0;
 
   const basic = useMemo(() => {
+    if (!isCtcValid || !isBasicValid) return 0;
     return (monthlyCtc * Number(basicPercent)) / 100;
-  }, [monthlyCtc, basicPercent]);
+  }, [monthlyCtc, basicPercent, isCtcValid, isBasicValid]);
 
   /* =========================
-     Allowances (Editable)
+     Allowances
   ========================= */
   const [hra, setHra] = useState(0);
   const [conveyance, setConveyance] = useState(1600);
@@ -32,68 +37,111 @@ export default function App() {
   const [medical, setMedical] = useState(1250);
   const [phone, setPhone] = useState(1500);
   const [special, setSpecial] = useState(0);
-
   const [isSpecialManual, setIsSpecialManual] = useState(false);
 
   useEffect(() => {
-    setHra(Math.round(basic * 0.4));
+    if (basic > 0) setHra(Math.round(basic * 0.4));
   }, [basic]);
 
   const earningsWithoutSpecial =
     basic + hra + conveyance + meal + medical + phone;
 
   useEffect(() => {
-    if (!isSpecialManual) {
-      const autoSpecial = Math.max(monthlyCtc - earningsWithoutSpecial, 0);
-      setSpecial(Math.round(autoSpecial));
+    if (monthlyCtc > 0 && !isSpecialManual) {
+      setSpecial(Math.max(monthlyCtc - earningsWithoutSpecial, 0));
     }
   }, [monthlyCtc, earningsWithoutSpecial, isSpecialManual]);
 
   const grossSalary = earningsWithoutSpecial + special;
 
   /* =========================
-     Provident Fund
+     Deductions
   ========================= */
   const [pfType, setPfType] = useState<"STATUTORY" | "FULL_BASIC">("STATUTORY");
-  const employeePf = pfType === "STATUTORY" ? 1800 : Math.round(basic * 0.12);
 
-  /* =========================
-     Other Deductions
-  ========================= */
-  const professionalTax = 200;
-  const incomeTax = 30000;
+  const employeePf =
+    basic > 0 ? (pfType === "STATUTORY" ? 1800 : Math.round(basic * 0.12)) : 0;
+
+  const professionalTax = basic > 0 ? 200 : 0;
+  const incomeTax = basic > 0 ? 30000 : 0;
+
   const totalDeductions = employeePf + professionalTax + incomeTax;
   const inHand = grossSalary - totalDeductions;
 
   /* =========================
-     Feedback (Google Sheets)
+     Feedback + Likes
   ========================= */
   const [feedbackText, setFeedbackText] = useState("");
-  const [feedbackList, setFeedbackList] = useState<string[]>([]);
+  const [username, setUsername] = useState("");
+  const [feedbackList, setFeedbackList] = useState<
+    { user: string; text: string; time: string }[]
+  >([]);
+
+  const [likes, setLikes] = useState(0);
+  const hasLiked = localStorage.getItem(LIKE_STORAGE_KEY) === "true";
 
   useEffect(() => {
-    fetch(FEEDBACK_API)
+    // Load feedback
+    fetch(`${FEEDBACK_API}?type=feedback`)
       .then((res) => res.json())
       .then((data) => {
-        const texts = data.map((item: any) => item.feedback);
-        setFeedbackList(texts.reverse());
-      })
-      .catch(console.error);
+        if (!Array.isArray(data)) return;
+        setFeedbackList(
+          data
+            .map((f: any) => ({
+              user: f.user || "Anonymous",
+              text: f.feedback,
+              time: new Date(f.timestamp).toLocaleString(),
+            }))
+            .reverse()
+        );
+      });
+
+    // Load likes
+    fetch(`${FEEDBACK_API}?type=likes`)
+      .then((res) => res.json())
+      .then((data) => setLikes(Number(data.likes) || 0));
   }, []);
 
   const submitFeedback = async () => {
     if (!feedbackText.trim()) return;
 
-    await fetch(FEEDBACK_API, {
-      method: "POST",
-      body: JSON.stringify({
-        feedback: feedbackText,
-        userAgent: navigator.userAgent,
-      }),
+    const params = new URLSearchParams({
+      action: "feedback",
+      feedback: feedbackText,
+      user: username || "Anonymous",
     });
 
-    setFeedbackList((prev) => [feedbackText, ...prev]);
+    await fetch(`${FEEDBACK_API}?${params.toString()}`);
+
     setFeedbackText("");
+    setUsername("");
+
+    const res = await fetch(`${FEEDBACK_API}?type=feedback`);
+    const data = await res.json();
+    if (!Array.isArray(data)) return;
+
+    setFeedbackList(
+      data
+        .map((f: any) => ({
+          user: f.user || "Anonymous",
+          text: f.feedback,
+          time: new Date(f.timestamp).toLocaleString(),
+        }))
+        .reverse()
+    );
+  };
+
+  const handleLike = async () => {
+    if (hasLiked) return;
+
+    const res = await fetch(`${FEEDBACK_API}?action=like`);
+    const data = await res.json();
+
+    if (typeof data.likes === "number") {
+      setLikes(data.likes);
+      localStorage.setItem(LIKE_STORAGE_KEY, "true");
+    }
   };
 
   /* =========================
@@ -114,6 +162,9 @@ export default function App() {
             onChange={(e) => setBasicPercent(e.target.value)}
             style={input}
           >
+            <option value="" disabled>
+              Select Basic %
+            </option>
             {Array.from({ length: 21 }, (_, i) => {
               const v = 30 + i;
               return (
@@ -124,16 +175,14 @@ export default function App() {
             })}
           </select>
 
-          <Muted>Monthly Basic: ₹ {basic.toFixed(0)}</Muted>
+          {isCtcValid && isBasicValid && (
+            <Muted>Monthly Basic: ₹ {basic.toFixed(0)}</Muted>
+          )}
         </Section>
 
         <Section title="Earnings">
           <Row label="Basic Salary" value={basic} />
-          <EditableRow
-            label="House Rent Allowance"
-            value={hra}
-            onChange={setHra}
-          />
+          <EditableRow label="HRA" value={hra} onChange={setHra} />
           <EditableRow
             label="Conveyance"
             value={conveyance}
@@ -151,9 +200,9 @@ export default function App() {
             onChange={setPhone}
           />
           <EditableRow
-            label="Special / Consolidated Allowance"
+            label="Special Allowance"
             value={special}
-            onChange={(v: number) => {
+            onChange={(v) => {
               setSpecial(v);
               setIsSpecialManual(true);
             }}
@@ -165,7 +214,9 @@ export default function App() {
           <Label text="Provident Fund (Employee)" />
           <select
             value={pfType}
-            onChange={(e) => setPfType(e.target.value as any)}
+            onChange={(e) =>
+              setPfType(e.target.value as "STATUTORY" | "FULL_BASIC")
+            }
             style={input}
           >
             <option value="STATUTORY">Statutory (₹1,800)</option>
@@ -179,50 +230,51 @@ export default function App() {
         </Section>
 
         <Section title="Summary">
-          <h2 style={net}>In-Hand Salary: ₹ {inHand.toFixed(0)}</h2>
+          {isCtcValid && isBasicValid ? (
+            <h2 style={net}>In-Hand Salary: ₹ {inHand.toFixed(0)}</h2>
+          ) : (
+            <Muted>Enter CTC and Basic % to see salary</Muted>
+          )}
         </Section>
 
-        {/* -------- Feedback -------- */}
+        {/* ---------- Feedback ---------- */}
         <Section title="Feedback">
+          <Label text="Your Name (optional)" />
+          <Input value={username} onChange={setUsername} />
+
+          <Label text="Your Feedback" />
           <textarea
             value={feedbackText}
             onChange={(e) => setFeedbackText(e.target.value)}
-            placeholder="Share your feedback..."
-            style={{
-              width: "100%",
-              minHeight: 80,
-              padding: 10,
-              borderRadius: 6,
-              border: "1px solid #ccc",
-            }}
+            style={input}
           />
 
-          <button
-            onClick={submitFeedback}
-            style={{
-              marginTop: 10,
-              padding: "8px 16px",
-              borderRadius: 6,
-              border: "none",
-              background: "#1976d2",
-              color: "#fff",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            Submit Feedback
-          </button>
+          <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
+            <button onClick={submitFeedback}>Submit Feedback</button>
 
-          <div style={{ marginTop: 20 }}>
-            {feedbackList.map((fb, i) => (
-              <div
-                key={i}
-                style={{ padding: "6px 0", borderBottom: "1px solid #eee" }}
-              >
-                {fb}
-              </div>
-            ))}
+            <button
+              onClick={handleLike}
+              disabled={hasLiked}
+              style={{
+                backgroundColor: hasLiked ? "#cfd8dc" : "#1976d2",
+                color: hasLiked ? "#666" : "#fff",
+                cursor: hasLiked ? "not-allowed" : "pointer",
+                border: "none",
+                padding: "8px 14px",
+                borderRadius: 6,
+                fontWeight: 600,
+              }}
+            >
+              👍 Like ({likes})
+            </button>
           </div>
+
+          {feedbackList.map((f, i) => (
+            <div key={i} style={{ marginTop: 10 }}>
+              <strong>{f.user}</strong> · {f.time}
+              <div>{f.text}</div>
+            </div>
+          ))}
         </Section>
       </div>
     </div>
@@ -230,35 +282,28 @@ export default function App() {
 }
 
 /* =========================
-   Small UI Components
+   Components & Styles
 ========================= */
 
-const Section = ({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) => (
+const Section = ({ title, children }: any) => (
   <section>
     <h3 style={section}>{title}</h3>
     {children}
   </section>
 );
 
-const Label = ({ text }: { text: string }) => <div style={label}>{text}</div>;
+const Label = ({ text }: any) => <div style={label}>{text}</div>;
 
-const Input = React.forwardRef<
-  HTMLInputElement,
-  { value: string; onChange: (v: string) => void }
->(({ value, onChange }, ref) => (
-  <input
-    ref={ref}
-    value={value}
-    onChange={(e) => onChange(e.target.value)}
-    style={input}
-  />
-));
+const Input = React.forwardRef<HTMLInputElement, any>(
+  ({ value, onChange }, ref) => (
+    <input
+      ref={ref}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={input}
+    />
+  )
+);
 
 const EditableRow = ({ label, value, onChange }: any) => (
   <div style={row}>
@@ -288,10 +333,6 @@ const TotalRow = ({ label, value }: any) => (
 
 const Muted = ({ children }: any) => <div style={muted}>{children}</div>;
 
-/* =========================
-   Styles
-========================= */
-
 const page: React.CSSProperties = {
   minHeight: "100vh",
   background: "#f4f6f8",
@@ -311,19 +352,17 @@ const card: React.CSSProperties = {
 };
 
 const title: React.CSSProperties = { marginBottom: 12 };
-const section: React.CSSProperties = { marginTop: 28, marginBottom: 12 };
+const section: React.CSSProperties = { marginTop: 28 };
 const label: React.CSSProperties = { fontWeight: 600, marginBottom: 4 };
-const muted: React.CSSProperties = {
-  fontSize: 13,
-  color: "#555",
-  marginTop: 6,
-};
+const muted: React.CSSProperties = { fontSize: 13, color: "#555" };
+
 const input: React.CSSProperties = {
   width: "100%",
   padding: 10,
   borderRadius: 6,
   border: "1px solid #ccc",
 };
+
 const smallInput: React.CSSProperties = {
   width: 160,
   padding: "6px 8px",
@@ -334,12 +373,14 @@ const smallInput: React.CSSProperties = {
   fontWeight: 600,
   textAlign: "right",
 };
+
 const row: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
   marginBottom: 10,
 };
+
 const totalRow: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
@@ -347,4 +388,5 @@ const totalRow: React.CSSProperties = {
   paddingTop: 8,
   marginTop: 8,
 };
+
 const net: React.CSSProperties = { color: "#2e7d32" };
