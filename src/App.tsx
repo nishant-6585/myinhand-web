@@ -153,7 +153,7 @@ export default function App() {
           <EditableRow
             label="Special / Consolidated Allowance"
             value={special}
-            onChange={(v) => {
+            onChange={(v: number) => {
               setSpecial(v);
               setIsSpecialManual(true);
             }}
